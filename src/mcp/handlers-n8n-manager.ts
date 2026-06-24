@@ -50,6 +50,11 @@ import {
 } from '../utils/cache-utils';
 import { processExecution } from '../services/execution-processor';
 import { checkNpmVersion, formatVersionMessage } from '../utils/npm-version-checker';
+import {
+  normalizeMcpJsonValue,
+  normalizeMcpWorkflowConnections,
+  normalizeMcpWorkflowNodes,
+} from '../utils/mcp-input-normalizer';
 
 // ========================================================================
 // TypeScript Interfaces for Type Safety
@@ -429,11 +434,11 @@ const optionalEmptyAware = <T extends z.ZodTypeAny>(schema: T) =>
 // Zod schemas for input validation
 const createWorkflowSchema = z.object({
   name: z.string(),
-  nodes: z.preprocess(tryParseJson, z.array(z.any())),
+  nodes: z.preprocess(normalizeMcpWorkflowNodes, z.array(z.any())),
   // Two-arg z.record(keySchema, valueSchema) — see services/n8n-validation.ts for the
   // Zod 3/4 compatibility rationale (#744).
-  connections: z.preprocess(tryParseJson, z.record(z.string(), z.any())),
-  settings: z.preprocess(tryParseJson, z.object({
+  connections: z.preprocess(normalizeMcpWorkflowConnections, z.record(z.string(), z.any())),
+  settings: z.preprocess(normalizeMcpJsonValue, z.object({
     executionOrder: z.enum(['v0', 'v1']).optional(),
     timezone: z.string().optional(),
     saveDataErrorExecution: z.enum(['all', 'none']).optional(),
@@ -449,9 +454,9 @@ const createWorkflowSchema = z.object({
 const updateWorkflowSchema = z.object({
   id: z.string(),
   name: z.string().optional(),
-  nodes: z.preprocess(tryParseJson, z.array(z.any())).optional(),
-  connections: z.preprocess(tryParseJson, z.record(z.string(), z.any())).optional(),
-  settings: z.preprocess(tryParseJson, z.any()).optional(),
+  nodes: z.preprocess(normalizeMcpWorkflowNodes, z.array(z.any())).optional(),
+  connections: z.preprocess(normalizeMcpWorkflowConnections, z.record(z.string(), z.any())).optional(),
+  settings: z.preprocess(normalizeMcpJsonValue, z.any()).optional(),
   createBackup: z.boolean().optional(),
   intent: z.string().optional(),
 });
@@ -460,7 +465,7 @@ const listWorkflowsSchema = z.object({
   limit: z.number().min(1).max(100).optional(),
   cursor: optionalEmptyAware(z.string()),
   active: z.boolean().optional(),
-  tags: z.preprocess(tryParseJson, z.array(z.string())).optional(),
+  tags: z.preprocess(normalizeMcpJsonValue, z.array(z.string())).optional(),
   projectId: optionalEmptyAware(z.string()),
   excludePinnedData: z.boolean().optional(),
 });
@@ -851,6 +856,71 @@ export async function handleGetWorkflowMinimal(args: unknown, context?: Instance
       };
     }
     
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
+    };
+  }
+}
+
+/**
+ * Returns the full config of only the requested nodes, identified by node name or node ID.
+ * Large workflows with long Code-node source can exceed client-side response limits when
+ * fetched whole (issue #101); this mode lets a caller pull one heavy node's `parameters`
+ * without the rest of the graph. Discover node names cheaply with mode='structure' first.
+ *
+ * `nodeNames` accepts both node names and node IDs; any entries that match nothing are
+ * reported back in `notFound` so the caller knows the lookup was partial.
+ */
+export async function handleGetWorkflowFiltered(args: unknown, context?: InstanceContext): Promise<McpToolResponse> {
+  try {
+    const client = ensureApiConfigured(context);
+    const { id, nodeNames } = z.object({
+      id: z.string(),
+      nodeNames: z.array(z.string()).min(1)
+    }).parse(args);
+
+    const workflow = await client.getWorkflow(id);
+
+    const requested = new Set(nodeNames);
+    const matchedNodes = workflow.nodes.filter(
+      node => requested.has(node.name) || requested.has(node.id)
+    );
+
+    // Report any requested keys that resolved to no node so partial requests are transparent.
+    const matchedKeys = new Set(matchedNodes.flatMap(node => [node.name, node.id]));
+    const notFound = nodeNames.filter(key => !matchedKeys.has(key));
+
+    return {
+      success: true,
+      data: {
+        id: workflow.id,
+        name: workflow.name,
+        active: workflow.active,
+        isArchived: workflow.isArchived,
+        nodes: matchedNodes,
+        nodeCount: workflow.nodes.length,
+        returnedCount: matchedNodes.length,
+        ...(notFound.length > 0 ? { notFound } : {})
+      }
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return {
+        success: false,
+        error: 'Invalid input',
+        details: { errors: error.errors }
+      };
+    }
+
+    if (error instanceof N8nApiError) {
+      return {
+        success: false,
+        error: getUserFriendlyErrorMessage(error),
+        code: error.code
+      };
+    }
+
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred'
@@ -2445,6 +2515,16 @@ export async function handleWorkflowVersions(
 ): Promise<McpToolResponse> {
   try {
     const input = workflowVersionsSchema.parse(args);
+
+    // SECURITY (GHSA-2cf7-hpwf-47h9): multi-tenant requests must resolve a
+    // complete tenant scope; fail closed otherwise.
+    if (process.env.ENABLE_MULTI_TENANT === 'true' && getInstanceScopeId(context) === '') {
+      return {
+        success: false,
+        error: 'Workflow version storage is not available for this tenant context'
+      };
+    }
+
     const client = context ? getN8nApiClient(context) : null;
     const versioningService = new WorkflowVersioningService(repository, client || undefined, getInstanceScopeId(context));
 
@@ -3271,6 +3351,46 @@ function stripCredentialData(credential: Credential): CredentialWithUsage {
   return safeCred;
 }
 
+// Not every n8n deployment allows credential reads through its public API:
+// older versions reject GET /credentials with 405 (#809), and API-key scopes
+// or instance settings can block it with 403. Detect that so list/get can
+// explain the limitation instead of surfacing a bare "GET method not allowed".
+function isCredentialReadUnsupported(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+  const status = (error as { statusCode?: number }).statusCode;
+  if (status === 405 || status === 403) {
+    return true;
+  }
+  // Some errors arrive unwrapped, without a statusCode — fall back to the
+  // reason phrase then, but never override a concrete non-405/403 status.
+  if (status !== undefined) {
+    return false;
+  }
+  const message = error instanceof Error ? error.message.toLowerCase() : '';
+  return message.includes('not allowed');
+}
+
+// Fresh object per call: the response carries per-error details, and a shared
+// singleton could be mutated downstream by future response decoration.
+function credentialReadUnsupportedResponse(error: unknown): McpToolResponse {
+  return {
+    success: false,
+    error:
+      'This n8n instance\'s public API rejected the credential read. On older n8n versions the public API ' +
+      'does not expose GET /credentials at all; on newer ones this can mean the API key or instance settings ' +
+      'do not permit credential reads. The create, delete, and getSchema actions generally still work, and ' +
+      'update does too where the API version supports it (it needs a known credential ID, not list/get). ' +
+      'To find an existing credential\'s ID, open it in the n8n UI — the ID is in the URL.',
+    code: 'NOT_SUPPORTED',
+    details: {
+      statusCode: (error as { statusCode?: number }).statusCode,
+      cause: error instanceof Error ? error.message : String(error),
+    },
+  };
+}
+
 export async function handleListCredentials(args: unknown, context?: InstanceContext): Promise<McpToolResponse> {
   try {
     const client = ensureApiConfigured(context);
@@ -3316,6 +3436,9 @@ export async function handleListCredentials(args: unknown, context?: InstanceCon
       },
     };
   } catch (error) {
+    if (isCredentialReadUnsupported(error)) {
+      return credentialReadUnsupportedResponse(error);
+    }
     return handleCrudError(error);
   }
 }
@@ -3328,14 +3451,13 @@ export async function handleGetCredential(args: unknown, context?: InstanceConte
     try {
       credential = await client.getCredential(id);
     } catch (getError: unknown) {
-      // GET /credentials/:id is not in the n8n public API — fall back to list + filter
-      const status = (getError as { statusCode?: number }).statusCode;
-      const msg = (getError as Error).message ?? '';
-      const isUnsupported = status === 405 || status === 403 || msg.includes('not allowed');
-      if (!isUnsupported) {
+      // GET /credentials/:id is not always in the n8n public API — fall back to list + filter
+      if (!isCredentialReadUnsupported(getError)) {
         throw getError;
       }
       // Paginate through ALL credentials — the target id may live beyond page 1.
+      // If the list endpoint is rejected too, the instance supports no credential
+      // reads at all; the outer catch turns that into the NOT_SUPPORTED response.
       const all = await client.listAllCredentials();
       credential = all.find((c) => c.id === id);
       if (!credential) {
@@ -3360,6 +3482,9 @@ export async function handleGetCredential(args: unknown, context?: InstanceConte
       data: usageScanError ? { ...enriched, usageScanError } : enriched,
     };
   } catch (error) {
+    if (isCredentialReadUnsupported(error)) {
+      return credentialReadUnsupportedResponse(error);
+    }
     return handleCrudError(error);
   }
 }

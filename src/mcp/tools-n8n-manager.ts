@@ -80,7 +80,7 @@ export const n8nManagementTools: ToolDefinition[] = [
   },
   {
     name: 'n8n_get_workflow',
-    description: `Get workflow by ID with different detail levels. n8n has a draft/publish model: the workflow body holds the draft (latest edits); use mode='active' to see the published graph that is actually running. Modes: 'full' (draft + metadata), 'details' (full + execution stats), 'active' (published graph only), 'structure' (nodes/connections topology), 'minimal' (id/name/active/tags).`,
+    description: `Get workflow by ID with different detail levels. n8n has a draft/publish model: the workflow body holds the draft (latest edits); use mode='active' to see the published graph that is actually running. Modes: 'full' (draft + metadata), 'details' (full + execution stats), 'active' (published graph only), 'structure' (nodes/connections topology), 'filtered' (full config of only the nodes named in nodeNames - use to read one heavy node without the whole workflow), 'minimal' (id/name/active/tags).`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -90,14 +90,15 @@ export const n8nManagementTools: ToolDefinition[] = [
         },
         mode: {
           type: 'string',
-          enum: ['full', 'details', 'structure', 'minimal', 'active'],
+          enum: ['full', 'details', 'structure', 'minimal', 'active', 'filtered'],
           default: 'full',
-          description: 'Detail level: full=draft + metadata (activeVersionId pointer kept, heavy activeVersion payload stripped), details=full+execution stats, active=published graph (errors if workflow has no live version), structure=nodes/connections topology, minimal=metadata only'
+          description: 'Detail level: full=draft + metadata (activeVersionId pointer kept, heavy activeVersion payload stripped), details=full+execution stats, active=published graph (errors if workflow has no live version), structure=nodes/connections topology, filtered=full config of only the nodes listed in nodeNames, minimal=metadata only'
         },
-        nodeFilter: {
+        nodeNames: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Optional: filter response to only include these node names (e.g., ["Integrar Ticket ID", "Agente Medio"]). Connections are also filtered to only those involving the specified nodes. If omitted, returns all nodes.',
+          minItems: 1,
+          description: "For mode='filtered': node names or node IDs to return with full config. Returns only matching nodes (avoids client-side truncation on large workflows with long Code-node source). Discover names with mode='structure' first."
         }
       },
       required: ['id']
@@ -664,7 +665,7 @@ Old backups are also pruned automatically (10 most recent per workflow, plus an 
   },
   {
     name: 'n8n_manage_credentials',
-    description: 'Manage n8n credentials. Actions: list, get, create, update, delete, getSchema. Use getSchema to discover required fields before creating. For list, page beyond 100 results with cursor (from the previous response\'s nextCursor). SECURITY: credential data values are never logged.',
+    description: 'Manage n8n credentials. Actions: list, get, create, update, delete, getSchema. Use getSchema to discover required fields before creating. For list, page beyond 100 results with cursor (from the previous response\'s nextCursor). NOTE: list/get need an n8n deployment whose public API permits credential reads — older n8n versions, restricted API keys, or instance settings can reject them, returning NOT_SUPPORTED (create, delete, getSchema — and update where the API version supports it — still work). SECURITY: credential data values are never logged.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -766,9 +767,10 @@ Old backups are also pruned automatically (10 most recent per workflow, plus an 
       openWorldHint: true,
     },
   },
+,
   {
     name: 'n8n_get_node_config',
-    description: `Get a single node's full configuration from a workflow by node name. Returns parameters, type, position, and other metadata without downloading the entire workflow. Use this instead of n8n_get_workflow(mode="full") when you only need one node's config.`,
+    description: `Get a single node's full configuration from a workflow by node name. Returns parameters, type, position, and other metadata without downloading the entire workflow. Use this instead of n8n_get_workflow(mode="full") when you only need one node's config. Use mode='filtered' with nodeNames for fetching multiple specific nodes.`,
     inputSchema: {
       type: 'object',
       properties: {
