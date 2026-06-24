@@ -13,7 +13,8 @@ export const n8nGetWorkflowDoc: ToolDocumentation = {
       'mode="details": Full workflow + execution stats',
       'mode="active": Published graph that is actually running (errors if workflow was never activated)',
       'mode="structure": Just nodes and connections (topology)',
-      'mode="minimal": Only id, name, active status, tags'
+      'mode="minimal": Only id, name, active status, tags',
+      'nodeFilter: Optional array of node names to filter response (e.g., ["Code Node", "HTTP Request"]). Reduces 130KB to ~3KB when you only need specific nodes. Connections are also filtered.'
     ]
   },
   full: {
@@ -24,23 +25,30 @@ export const n8nGetWorkflowDoc: ToolDocumentation = {
 - details: Full draft + execution statistics (success/error counts, last execution time)
 - active: The published (running) graph. On older n8n versions that don't have the draft/publish split, falls back to \`workflow.nodes\` when \`active: true\` so the mode stays usable across n8n versions. Returns \`code: 'NO_ACTIVE_VERSION'\` only for inactive workflows that were never published.
 - structure: Nodes and connections only - useful for topology analysis
-- minimal: Just id, name, active status, and tags - fastest response`,
+- minimal: Just id, name, active status, and tags - fastest response
+
+**nodeFilter (NEW):** Pass an array of node names to return only those nodes and their connections. The response includes \`_filterApplied\` metadata showing how many nodes matched. This reduces response size from 130KB+ to ~3KB when you only need 2-3 nodes. Much more efficient than downloading the full workflow and filtering client-side.`,
     parameters: {
       id: { type: 'string', required: true, description: 'Workflow ID to retrieve' },
-      mode: { type: 'string', required: false, description: 'Detail level: "full" (default), "details", "active", "structure", "minimal"' }
+      mode: { type: 'string', required: false, description: 'Detail level: "full" (default), "details", "active", "structure", "minimal"' },
+      nodeFilter: { type: 'string[]', required: false, description: 'Optional: filter response to only include these node names (e.g., ["Integrar Ticket ID", "Agente Medio"]). Connections are also filtered to only those involving the specified nodes. Response includes _filterApplied metadata.' }
     },
     returns: `Depends on mode:
 - full: Draft workflow object (id, name, active, nodes[], connections{}, settings, createdAt, updatedAt, activeVersionId)
 - details: Full draft + executionStats (successCount, errorCount, lastExecution, etc.)
 - active: Published graph as { id, name, active, activeVersionId, versionCreatedAt, versionName, nodes[], connections{}, settings, tags, createdAt, updatedAt }. \`versionCreatedAt\` is the version row's creation time (within ~1s of the publish event in current n8n). Returns { success: false, code: 'NO_ACTIVE_VERSION' } if the workflow has no published version.
 - structure: { nodes: [...], connections: {...} } - topology only
-- minimal: { id, name, active, tags, createdAt, updatedAt }`,
+- minimal: { id, name, active, tags, createdAt, updatedAt }
+
+When nodeFilter is used, response also includes:
+_filterApplied: { requested: number, matched: number, notFound?: string[] }`,
     examples: [
       '// Get draft workflow (default)\nn8n_get_workflow({id: "abc123"})',
       '// Get draft + execution stats\nn8n_get_workflow({id: "abc123", mode: "details"})',
       '// Get the published/running graph\nn8n_get_workflow({id: "abc123", mode: "active"})',
       '// Get just the topology\nn8n_get_workflow({id: "abc123", mode: "structure"})',
-      '// Quick metadata check\nn8n_get_workflow({id: "abc123", mode: "minimal"})'
+      '// Quick metadata check\nn8n_get_workflow({id: "abc123", mode: "minimal"})',
+      '// Filter to specific nodes (130KB -> ~3KB)\nn8n_get_workflow({id: "abc123", mode: "full", nodeFilter: ["Code Node", "HTTP Request"]})'
     ],
     useCases: [
       'View and edit the draft (mode=full)',
@@ -48,7 +56,8 @@ export const n8nGetWorkflowDoc: ToolDocumentation = {
       'Inspect what is actually running in production (mode=active)',
       'Diff draft vs published before promoting (mode=full + mode=active)',
       'Clone or compare workflow structure (mode=structure)',
-      'List workflows with status (mode=minimal)'
+      'List workflows with status (mode=minimal)',
+      'Get only specific nodes from a large workflow (nodeFilter)'
     ],
     performance: `Response times vary by mode:
 - minimal: ~20-50ms (smallest response)
@@ -62,7 +71,8 @@ export const n8nGetWorkflowDoc: ToolDocumentation = {
       'Use mode="full" (default) when editing the draft',
       'Use mode="active" when you need to reason about what is actually running, not what is being edited',
       'Use mode="details" for debugging execution issues',
-      'Validate workflow after retrieval if planning modifications'
+      'Validate workflow after retrieval if planning modifications',
+      'Use nodeFilter when you only need 2-3 nodes from a large workflow — saves 90%+ tokens'
     ],
     pitfalls: [
       'Requires N8N_API_URL and N8N_API_KEY configured',
@@ -72,6 +82,6 @@ export const n8nGetWorkflowDoc: ToolDocumentation = {
       'Workflow must exist or returns 404 error',
       'Credentials are referenced by ID but values not included'
     ],
-    relatedTools: ['n8n_list_workflows', 'n8n_update_full_workflow', 'n8n_update_partial_workflow', 'n8n_validate_workflow']
+    relatedTools: ['n8n_list_workflows', 'n8n_update_full_workflow', 'n8n_update_partial_workflow', 'n8n_validate_workflow', 'n8n_get_node_config', 'n8n_read_node_field']
   }
 };

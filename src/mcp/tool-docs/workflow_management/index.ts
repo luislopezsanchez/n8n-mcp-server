@@ -13,3 +13,5 @@ export { n8nDeployTemplateDoc } from './n8n-deploy-template';
 export { n8nManageDatatableDoc } from './n8n-manage-datatable';
 export { n8nGenerateWorkflowDoc } from './n8n-generate-workflow';
 export { n8nManageCredentialsDoc } from './n8n-manage-credentials';
+export { n8nGetNodeConfigDoc } from './n8n-get-node-config';
+export { n8nReadNodeFieldDoc } from './n8n-read-node-field';

@@ -1175,23 +1175,6 @@ export class N8NDocumentationMCPServer {
         // No required parameters - all are optional
         validationResult = { valid: true, errors: [] };
         break;
-      case 'n8n_get_node_config':
-        validationResult = args.workflowId && args.nodeName
-          ? { valid: true, errors: [] }
-          : { valid: false, errors: [
-              ...(args.workflowId ? [] : [{ field: 'workflowId', message: 'workflowId is required' }]),
-              ...(args.nodeName ? [] : [{ field: 'nodeName', message: 'nodeName is required' }]),
-            ]};
-        break;
-      case 'n8n_read_node_field':
-        validationResult = args.workflowId && args.nodeName && args.fieldPath
-          ? { valid: true, errors: [] }
-          : { valid: false, errors: [
-              ...(args.workflowId ? [] : [{ field: 'workflowId', message: 'workflowId is required' }]),
-              ...(args.nodeName ? [] : [{ field: 'nodeName', message: 'nodeName is required' }]),
-              ...(args.fieldPath ? [] : [{ field: 'fieldPath', message: 'fieldPath is required' }]),
-            ]};
-        break;
       case 'n8n_deploy_template':
         // Requires templateId parameter
         validationResult = args.templateId !== undefined
@@ -1718,14 +1701,6 @@ export class N8NDocumentationMCPServer {
       case 'n8n_audit_instance':
         // No required parameters - all are optional
         return n8nHandlers.handleAuditInstance(args, this.instanceContext);
-
-      case 'n8n_get_node_config':
-        this.validateToolParams(name, args, ['workflowId', 'nodeName']);
-        return n8nHandlers.handleGetNodeConfig(args, this.instanceContext);
-
-      case 'n8n_read_node_field':
-        this.validateToolParams(name, args, ['workflowId', 'nodeName', 'fieldPath']);
-        return n8nHandlers.handleReadNodeField(args, this.instanceContext);
 
       case 'n8n_generate_workflow': {
         this.validateToolParams(name, args, ['description']);

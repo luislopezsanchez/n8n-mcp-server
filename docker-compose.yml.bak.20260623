@@ -21,7 +21,7 @@ services:
       NODE_DB_PATH: /app/data/nodes.db
       REBUILD_ON_START: "false"
       AUTH_TOKEN: "${AUTH_TOKEN}"
-      BASE_URL: "${BASE_URL:-http://n8n-mcp.innovanet.uy}"
+      BASE_URL: "${BASE_URL:-http://209.126.86.242:3001}"
       WEBHOOK_SECURITY_MODE: permissive
       N8N_MCP_TELEMETRY_DISABLED: "true"
       N8N_API_URL: "${N8N_API_URL:-http://n8n:5678}"
@@ -33,7 +33,7 @@ services:
       - n8n-mcp-data:/app/data
 
     ports:
-      - "127.0.0.1:3001:3001"
+      - "3001:3001"
 
     networks:
       - baota_net

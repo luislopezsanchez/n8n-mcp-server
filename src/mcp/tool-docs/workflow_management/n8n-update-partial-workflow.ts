@@ -23,7 +23,8 @@ export const n8nUpdatePartialWorkflowDoc: ToolDocumentation = {
       'Auto-sanitization: ALL nodes auto-fixed during updates (operator structures, missing metadata)',
       'Node renames automatically update all connection references - no manual connection operations needed',
       'Activate/deactivate workflows: Use activateWorkflow/deactivateWorkflow operations (requires activatable triggers like webhook/schedule)',
-      'Transfer workflows between projects: Use transferWorkflow with destinationProjectId (enterprise feature)'
+      'Transfer workflows between projects: Use transferWorkflow with destinationProjectId (enterprise feature)',
+      'To READ a field value before editing, use n8n_read_node_field — patchNodeField is WRITE-ONLY (no mode="read")'
     ]
   },
   full: {
@@ -35,7 +36,7 @@ export const n8nUpdatePartialWorkflowDoc: ToolDocumentation = {
 - **addNode**: Add a new node with name, type, and position (required)
 - **removeNode**: Remove a node by ID or name
 - **updateNode**: Update node properties using dot notation (e.g., 'parameters.url')
-- **patchNodeField**: Surgically edit string fields using find/replace patches. Strict mode: errors if find string not found, errors if multiple matches (ambiguity) unless replaceAll is set. Supports replaceAll and regex flags.
+- **patchNodeField**: WRITE-ONLY. Surgically edit string fields using find/replace patches. Strict mode: errors if find string not found, errors if multiple matches (ambiguity) unless replaceAll is set. Supports replaceAll and regex flags. To READ a field value first, use n8n_read_node_field.
 - **moveNode**: Change node position [x, y]
 - **enableNode**: Enable a disabled node
 - **disableNode**: Disable an active node
@@ -438,8 +439,9 @@ n8n_update_partial_workflow({
       'When properties are mutually exclusive (e.g., continueOnFail and onError), setting only the new property will fail - you must remove the old one with null',
       'Removing a required property may cause validation errors - check node documentation first',
       'Nested property removal with dot notation only removes the specific nested field, not the entire parent object',
-      'Array index notation (e.g., "parameters.headers[0]") is not supported - remove the entire array property instead'
+      'Array index notation (e.g., "parameters.headers[0]") is not supported - remove the entire array property instead',
+      '**patchNodeField does NOT support mode="read"** — it is write-only. To read a field value before editing, use the separate n8n_read_node_field tool'
     ],
-    relatedTools: ['n8n_update_full_workflow', 'n8n_get_workflow', 'validate_workflow', 'tools_documentation']
+    relatedTools: ['n8n_update_full_workflow', 'n8n_get_workflow', 'n8n_get_node_config', 'n8n_read_node_field', 'validate_workflow', 'tools_documentation']
   }
 };

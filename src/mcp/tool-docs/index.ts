@@ -26,7 +26,9 @@ import {
   n8nDeployTemplateDoc,
   n8nManageDatatableDoc,
   n8nGenerateWorkflowDoc,
-  n8nManageCredentialsDoc
+  n8nManageCredentialsDoc,
+  n8nGetNodeConfigDoc,
+  n8nReadNodeFieldDoc
 } from './workflow_management';
 
 // Combine all tool documentations into a single object
@@ -68,7 +70,11 @@ export const toolsDocumentation: Record<string, ToolDocumentation> = {
   n8n_deploy_template: n8nDeployTemplateDoc,
   n8n_manage_datatable: n8nManageDatatableDoc,
   n8n_generate_workflow: n8nGenerateWorkflowDoc,
-  n8n_manage_credentials: n8nManageCredentialsDoc
+  n8n_manage_credentials: n8nManageCredentialsDoc,
+
+  // New tools (v2.54.0+)
+  n8n_get_node_config: n8nGetNodeConfigDoc,
+  n8n_read_node_field: n8nReadNodeFieldDoc
 };
 
 // Re-export types
