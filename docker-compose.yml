@@ -1,0 +1,67 @@
+# docker-compose.yml - n8n-mcp produccion
+# Red: baota_net (misma que n8n) -> URL interna: http://n8n:5678
+# Puerto 3000 ocupado por Grafana -> expone 3001
+
+services:
+  n8n-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: n8n-mcp:local
+    container_name: n8n-mcp
+    restart: unless-stopped
+    env_file: .env
+
+    environment:
+      MCP_MODE: http
+      PORT: "3001"
+      HOST: "0.0.0.0"
+      NODE_ENV: production
+      LOG_LEVEL: info
+      NODE_DB_PATH: /app/data/nodes.db
+      REBUILD_ON_START: "false"
+      AUTH_TOKEN: "${AUTH_TOKEN}"
+      BASE_URL: "${BASE_URL:-http://localhost:3001}"
+      WEBHOOK_SECURITY_MODE: permissive
+      N8N_MCP_TELEMETRY_DISABLED: "true"
+      N8N_API_URL: "${N8N_API_URL:-http://n8n:5678}"
+      N8N_API_KEY: "${N8N_API_KEY:-}"
+      N8N_API_TIMEOUT: "30000"
+      N8N_API_MAX_RETRIES: "3"
+
+    volumes:
+      - n8n-mcp-data:/app/data
+
+    ports:
+      - "127.0.0.1:3001:3001"
+
+    networks:
+      - baota_net
+
+    healthcheck:
+      test: ["CMD", "sh", "-c", "curl -sf http://127.0.0.1:3001/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  n8n-mcp-data:
+    driver: local
+
+networks:
+  baota_net:
+    external: true
