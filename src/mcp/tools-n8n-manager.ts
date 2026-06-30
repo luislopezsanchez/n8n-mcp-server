@@ -767,7 +767,6 @@ Old backups are also pruned automatically (10 most recent per workflow, plus an 
       openWorldHint: true,
     },
   },
-,
   {
     name: 'n8n_get_node_config',
     description: `Get a single node's full configuration from a workflow by node name. Returns parameters, type, position, and other metadata without downloading the entire workflow. Use this instead of n8n_get_workflow(mode="full") when you only need one node's config. Use mode='filtered' with nodeNames for fetching multiple specific nodes.`,
