@@ -107,6 +107,7 @@ data/*.db.backup
 data/*.db-shm
 data/*.db-wal
 !data/.gitkeep
+!data/nodes.db
 n8n-nodes.db
 src/database/nodes.db
 
